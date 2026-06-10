@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Foci pontozás kalkulátor</title>
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --card2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --border:#334155; --ok:#22c55e; --info:#38bdf8; }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#0b1220,var(--bg));color:var(--text);padding:24px;min-height:100vh}
+    .wrap{max-width:1024px;margin:0 auto;display:grid;gap:24px}.card{background:rgba(17,24,39,.94);border:1px solid var(--border);border-radius:18px;padding:20px}
+    h1,h2,p{margin-top:0}.lead,.small{color:var(--muted)} .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+    label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px} input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px} button{border:0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer}.primary{background:var(--ok);color:#06270f}.secondary{background:#1d4ed8;color:#fff}
+    .result{display:grid;grid-template-columns:200px 1fr;gap:20px}.score{border:1px solid var(--border);border-radius:18px;padding:20px;text-align:center;background:linear-gradient(135deg,rgba(34,197,94,.15),rgba(56,189,248,.12))}.points{font-size:58px;font-weight:800;line-height:1;color:var(--ok)}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(56,189,248,.15);color:#7dd3fc;font-size:13px;margin-bottom:8px}.rule-list{display:grid;gap:10px}.rule{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:rgba(31,41,55,.65)}.rule.active{border-color:rgba(34,197,94,.65);background:rgba(34,197,94,.12)}
+    table{width:100%;border-collapse:collapse} th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border);vertical-align:top} th{color:var(--muted);font-size:14px}.note{color:#fde68a}
+    @media(max-width:760px){.grid,.result{grid-template-columns:1fr}.points{font-size:46px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Foci pontozás kalkulátor</h1>
+      <p class="lead">Ez a verzió halmozott pontozással számol. Telitalálat esetén a kapcsolódó rész-találatok is pontot érnek, ezért egy tökéletes tipp akár 25 pontot is adhat.</p>
+      <div class="grid">
+        <div><label for="actualHome">Valós hazai gól</label><input id="actualHome" type="number" min="0" value="2"></div>
+        <div><label for="actualAway">Valós vendég gól</label><input id="actualAway" type="number" min="0" value="1"></div>
+        <div><label for="predHome">Tippelt hazai gól</label><input id="predHome" type="number" min="0" value="2"></div>
+        <div><label for="predAway">Tippelt vendég gól</label><input id="predAway" type="number" min="0" value="1"></div>
+      </div>
+      <div class="row">
+        <button class="primary" onclick="calculate()">Pontszám kiszámítása</button>
+        <button class="secondary" onclick="fillPerfect()">Példa: 25 pontos telitalálat</button>
+      </div>
+    </section>
+
+    <section class="card result">
+      <div class="score">
+        <div class="badge">Összes pont</div>
+        <div class="points" id="points">0</div>
+        <div>pont</div>
+      </div>
+      <div>
+        <h2>Találatok</h2>
+        <p id="reason">Adj meg eredményt és tippet.</p>
+        <div class="rule-list" id="rulesState"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pontozási szabályok</h2>
+      <table>
+        <thead><tr><th>Szabály</th><th>Pont</th><th>Leírás</th></tr></thead>
+        <tbody>
+          <tr><td>Telitalálat</td><td>10</td><td>A pontos végeredmény teljes eltalálása.</td></tr>
+          <tr><td>Gólkülönbség + helyes győztes</td><td>6</td><td>A gólkülönbség stimmel, és a győztes is helyes.</td></tr>
+          <tr><td>Helyes 1-X-2</td><td>4</td><td>A győztes vagy a döntetlen helyes eltalálása.</td></tr>
+          <tr><td>Az egyik csapat góljainak eltalálása</td><td>3</td><td>Bármelyik csapat által szerzett gól pontos eltalálása.</td></tr>
+          <tr><td>Összes gól</td><td>2</td><td>A meccsen szerzett összes gól számának eltalálása.</td></tr>
+          <tr><td>Fordított gólkülönbség</td><td>1</td><td>A gólkülönbség stimmel, de fordított győztessel.</td></tr>
+        </tbody>
+      </table>
+      <p class="small note" style="margin-top:12px;">Értelmezés: a szabályok halmozódnak. Emiatt telitalálatnál a 10 + 6 + 4 + 3 + 2 = 25 pont is kijöhet. Ezt a logikát több prediction rendszer is támogatja halmozott pontozásnál, míg más rendszerek külön jelzik, ha a pontok nem kumulatívak. [web:29][web:34]</p>
+    </section>
+  </div>
+
+  <script>
+    const rules = [
+      { id: 'exact', points: 10, title: 'Telitalálat', desc: 'A pontos végeredmény teljesen megegyezik.' },
+      { id: 'goalDiffCorrectWinner', points: 6, title: 'Gólkülönbség + helyes győztes', desc: 'A gólkülönbség egyezik és a kimenetel is helyes.' },
+      { id: 'outcome', points: 4, title: 'Helyes 1-X-2', desc: 'A győztes vagy a döntetlen helyesen lett megtippelve.' },
+      { id: 'oneTeamGoals', points: 3, title: 'Az egyik csapat góljai', desc: 'Legalább az egyik csapat góljai pontosan egyeznek.' },
+      { id: 'totalGoals', points: 2, title: 'Összes gól', desc: 'A meccsen szerzett összes gól száma egyezik.' },
+      { id: 'goalDiffReversed', points: 1, title: 'Fordított gólkülönbség', desc: 'A gólkülönbség abszolút értéke egyezik, de a győztes rossz.' }
+    ];
+
+    function outcome(home, away) {
+      if (home > away) return '1';
+      if (home < away) return '2';
+      return 'X';
+    }
+
+    function evaluate(actualHome, actualAway, predHome, predAway) {
+      const actualDiff = actualHome - actualAway;
+      const predDiff = predHome - predAway;
+      const actualOutcome = outcome(actualHome, actualAway);
+      const predOutcome = outcome(predHome, predAway);
+      const actualTotal = actualHome + actualAway;
+      const predTotal = predHome + predAway;
+
+      const checks = {
+        exact: actualHome === predHome && actualAway === predAway,
+        goalDiffCorrectWinner: actualDiff === predDiff && actualOutcome === predOutcome,
+        outcome: actualOutcome === predOutcome,
+        oneTeamGoals: actualHome === predHome || actualAway === predAway,
+        totalGoals: actualTotal === predTotal,
+        goalDiffReversed: Math.abs(actualDiff) === Math.abs(predDiff) && actualOutcome !== predOutcome && actualOutcome !== 'X' && predOutcome !== 'X'
+      };
+
+      const matchedRules = rules.filter(rule => checks[rule.id]);
+      const totalPoints = matchedRules.reduce((sum, rule) => sum + rule.points, 0);
+      return { matchedRules, checks, totalPoints };
+    }
+
+    function renderRules(checks) {
+      document.getElementById('rulesState').innerHTML = rules.map(rule => `
+        <div class="rule ${checks && checks[rule.id] ? 'active' : ''}">
+          <strong>${rule.title}</strong> — ${rule.points} pont<br>
+          <span class="small">${rule.desc}</span>
+        </div>
+      `).join('');
+    }
+
+    function calculate() {
+      const actualHome = Number(document.getElementById('actualHome').value);
+      const actualAway = Number(document.getElementById('actualAway').value);
+      const predHome = Number(document.getElementById('predHome').value);
+      const predAway = Number(document.getElementById('predAway').value);
+
+      if ([actualHome, actualAway, predHome, predAway].some(v => Number.isNaN(v) || v < 0)) {
+        document.getElementById('points').textContent = '0';
+        document.getElementById('reason').innerHTML = 'Kérlek, csak 0 vagy annál nagyobb számokat adj meg.';
+        renderRules();
+        return;
+      }
+
+      const result = evaluate(actualHome, actualAway, predHome, predAway);
+      document.getElementById('points').textContent = result.totalPoints;
+      document.getElementById('reason').innerHTML = result.matchedRules.length
+        ? `<strong>Aktív szabályok:</strong><br><span class="small">${result.matchedRules.map(r => `${r.title} (${r.points} pont)`).join('<br>')}</span>`
+        : '<strong>Nincs találat</strong><br><span class="small">Egyik szabály sem teljesült.</span>';
+      renderRules(result.checks);
+    }
+
+    function fillPerfect() {
+      document.getElementById('actualHome').value = 2;
+      document.getElementById('actualAway').value = 1;
+      document.getElementById('predHome').value = 2;
+      document.getElementById('predAway').value = 1;
+      calculate();
+    }
+
+    calculate();
+  </script>
+</body>
+</html>
